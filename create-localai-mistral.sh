@@ -2,7 +2,7 @@
 set -euo pipefail
 trap 'echo "❌ Script failed on line $LINENO. Exiting." >&2' ERR
 
-echo -e "\n🌐 \e[1mLocalAI LXC Installer v1.9.1 (Token Retry Fix)\e[0m"
+echo -e "\n🌐 \e[1mLocalAI LXC Installer v1.9.2 (Without Model Auto-Download)\e[0m"
 
 # Set defaults
 LXC_ID=10065
@@ -23,11 +23,6 @@ while true; do
   [ "$ROOT_PASSWORD" = "$CONFIRM_PASSWORD" ] && break
   echo "❌ Passwords do not match. Try again."
 done
-
-# Optional HuggingFace token prompt
-echo
-read -rp "🔑 Enter Hugging Face token (leave blank to try unauthenticated): " HF_TOKEN
-HF_TOKEN=${HF_TOKEN:-}
 
 # Template
 TEMPLATE=$(pveam available | awk '$2 ~ /^debian-12-standard/ { print $2 }' | sort -r | head -n1)
@@ -51,12 +46,10 @@ pct create "$LXC_ID" local:vztmpl/$TEMPLATE \
 # Set password
 pct exec "$LXC_ID" -- bash -c "echo 'root:$ROOT_PASSWORD' | chpasswd"
 
-# Install dependencies, LocalAI, and Mistral
+# Install dependencies and LocalAI only (no Python/pip/model logic)
 pct exec "$LXC_ID" -- bash -c "
   set -e
-  apt update && apt install -y curl wget file python3 python3-pip build-essential libopenblas-dev ca-certificates
-
-  pip3 install --no-cache-dir 'huggingface_hub[cli]'
+  apt update && apt install -y curl wget file build-essential libopenblas-dev ca-certificates
 
   mkdir -p /usr/local/bin /models
   cd /usr/local/bin
@@ -70,36 +63,6 @@ pct exec "$LXC_ID" -- bash -c "
   file localai | grep -q 'ELF 64-bit' || { echo '❌ Invalid binary'; exit 1; }
   chmod +x localai
   ./localai --version || echo '⚠️ Could not determine version'
-
-  echo '📥 Attempting unauthenticated Mistral model download via HuggingFace CLI...'
-  huggingface-cli logout || true
-
-  if huggingface-cli download \
-    TheBloke/Mistral-7B-Instruct-v0.1-GGUF \
-    mistral-7b-instruct-v0.1.Q4_K_M.gguf \
-    --local-dir /models \
-    --local-dir-use-symlinks False; then
-    echo '✅ Mistral model downloaded without token.'
-  else
-    echo '⚠️ Download failed. Trying again with token...'
-    if [ -z \"$HF_TOKEN\" ]; then
-      read -rp '🔐 Enter Hugging Face token: ' HF_TOKEN
-    fi
-    huggingface-cli login --token \"$HF_TOKEN\"
-    huggingface-cli download \
-      TheBloke/Mistral-7B-Instruct-v0.1-GGUF \
-      mistral-7b-instruct-v0.1.Q4_K_M.gguf \
-      --local-dir /models \
-      --local-dir-use-symlinks False || { echo '❌ Model download failed even with token.'; exit 1; }
-  fi
-
-  cat <<EOF > /models/config.yaml
-- name: mistral
-  backend: llama-cpp
-  model: mistral-7b-instruct-v0.1.Q4_K_M.gguf
-  context_size: 4096
-  f16: true
-EOF
 
   cat <<EOF > /etc/systemd/system/localai.service
 [Unit]
@@ -123,4 +86,18 @@ EOF
 "
 
 IP_ADDR=$(pct exec "$LXC_ID" -- hostname -I | awk '{print $1}')
-echo "🌐 LocalAI is expected at: http://$IP_ADDR:8080"
+echo -e "\n🌐 LocalAI is expected at: http://$IP_ADDR:8080"
+echo -e "\n🔹 Model not installed automatically in this version."
+echo "To manually install the Mistral model, run the following on your PVE host:"
+echo
+cat <<'EOF'
+pip install huggingface_hub[cli] --break-system-packages
+huggingface-cli login  # if needed
+huggingface-cli download TheBloke/Mistral-7B-Instruct-v0.1-GGUF mistral-7b-instruct-v0.1.Q4_K_M.gguf \
+  --local-dir /var/lib/lxc-models \
+  --local-dir-use-symlinks False
+mkdir -p /var/lib/lxc/10065/rootfs/models
+cp /var/lib/lxc-models/mistral-7b-instruct-v0.1.Q4_K_M.gguf /var/lib/lxc/10065/rootfs/models/
+EOF
+
+echo -e "\n✅ LocalAI container is built. Model installation is deferred for manual control."
