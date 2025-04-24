@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Author: nickysqueekz
 # Repo: https://github.com/nickysqueekz/proxmox-scripts
-# Description: Creates a minimal LXC container for LocalAI + Mistral (CPU-only, OpenAI-compatible)
+# Description: Minimal Proxmox LXC installer for LocalAI + Mistral (OpenAI API, CPU-only)
 # License: MIT
 
 set -euo pipefail
 trap 'echo "❌ Script failed on line $LINENO. Exiting." >&2' ERR
 
 header_info() {
-  echo -e "\n🌐 \e[1mLocalAI (Mistral 7B Instruct) LXC Installer v1.6\e[0m"
-  echo "Lean, fail-fast Proxmox script to provision a clean CPU-only LLM container."
+  echo -e "\n🌐 \e[1mLocalAI (Mistral 7B Instruct) LXC Installer v1.7\e[0m"
+  echo "Minimal, fail-fast Proxmox script to install LocalAI with Mistral support (CPU-only)."
   echo ""
 }
 
@@ -103,8 +103,13 @@ pct exec "$LXC_ID" -- bash -c "
   apt update && apt upgrade -y
   apt install -y --no-install-recommends curl wget unzip build-essential libopenblas-dev
 
+  mkdir -p /usr/local/bin
   cd /usr/local/bin
-  wget -q https://github.com/go-skynet/LocalAI/releases/latest/download/localai-linux-amd64 -O localai
+  echo '⬇️ Downloading LocalAI binary...'
+  if ! wget -q https://github.com/go-skynet/LocalAI/releases/latest/download/localai-linux-amd64 -O localai; then
+    echo '❌ ERROR: Failed to download LocalAI binary.'
+    exit 1
+  fi
   chmod +x localai
 
   mkdir -p /models
@@ -124,7 +129,7 @@ pct exec "$LXC_ID" -- bash -c "
   f16: true
 EOF
 
-  echo '⚙️ Setting up systemd service...'
+  echo '⚙️ Creating systemd service...'
   cat <<EOF > /etc/systemd/system/localai.service
 [Unit]
 Description=LocalAI Server
