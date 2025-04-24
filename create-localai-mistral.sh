@@ -8,8 +8,8 @@ set -euo pipefail
 trap 'echo "❌ Script failed on line $LINENO. Exiting." >&2' ERR
 
 header_info() {
-  echo -e "\n🌐 \e[1mLocalAI (Mistral 7B Instruct) LXC Installer v1.7\e[0m"
-  echo "Minimal, fail-fast Proxmox script to install LocalAI with Mistral support (CPU-only)."
+  echo -e "\n🌐 \e[1mLocalAI (Mistral 7B Instruct) LXC Installer v1.8\e[0m"
+  echo "Minimal, fail-fast Proxmox script to install LocalAI with Mistral (CPU-only, OpenAI-style API)."
   echo ""
 }
 
@@ -105,12 +105,15 @@ pct exec "$LXC_ID" -- bash -c "
 
   mkdir -p /usr/local/bin
   cd /usr/local/bin
-  echo '⬇️ Downloading LocalAI binary...'
-  if ! wget -q https://github.com/go-skynet/LocalAI/releases/latest/download/localai-linux-amd64 -O localai; then
-    echo '❌ ERROR: Failed to download LocalAI binary.'
+
+  echo '⬇️ Downloading LocalAI binary (via curl)...'
+  if ! curl -sL https://github.com/go-skynet/LocalAI/releases/latest/download/localai-linux-amd64 -o localai; then
+    echo '❌ ERROR: Failed to download LocalAI binary. Check network or GitHub.'
     exit 1
   fi
   chmod +x localai
+  echo '✅ LocalAI binary installed.'
+  ./localai --version || echo '⚠️ LocalAI version could not be determined.'
 
   mkdir -p /models
   cd /models
