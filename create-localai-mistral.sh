@@ -9,7 +9,7 @@ set -e
 header_info() {
   echo -e "🌐 \e[1mLocalAI (Mistral 7B Instruct) LXC Installer\e[0m"
   echo "This script creates a Proxmox LXC with LocalAI and Mistral for OpenAI-style use."
-  echo "CPU-only, optimized for chat-based summarization, code help, and smart home narration."
+  echo "CPU-only, optimized for smart home summarization, code help, and scene narration."
   echo ""
 }
 
@@ -88,7 +88,7 @@ pct create "$LXC_ID" local:vztmpl/$TEMPLATE \
   --onboot 1 \
   --description "LocalAI + Mistral 7B Instruct container"
 
-# Inside container: install LocalAI + model
+# Inside container: install LocalAI precompiled + model
 echo "🛠️ Configuring LocalAI inside container $LXC_ID..."
 pct exec "$LXC_ID" -- bash -c "
   set -e
@@ -97,8 +97,11 @@ pct exec "$LXC_ID" -- bash -c "
   apt upgrade -y
   apt install -y --no-install-recommends curl wget unzip build-essential libopenblas-dev
 
-  echo '⬇️ Installing LocalAI...'
-  curl -s https://raw.githubusercontent.com/go-skynet/LocalAI/main/install.sh | bash
+  echo '⬇️ Installing LocalAI binary...'
+  cd /usr/local/bin
+  wget -q https://github.com/go-skynet/LocalAI/releases/latest/download/localai-linux-amd64 -O localai
+  chmod +x localai
+  echo '✅ LocalAI installed:' \$(/usr/local/bin/localai --version || echo 'Version info not available')
 
   mkdir -p /models
   cd /models
@@ -121,7 +124,7 @@ Description=LocalAI (OpenAI-compatible local LLM server)
 After=network.target
 
 [Service]
-ExecStart=/localai --models-path /models
+ExecStart=/usr/local/bin/localai --models-path /models
 Restart=always
 RestartSec=5
 WorkingDirectory=/models
@@ -141,3 +144,4 @@ echo ""
 echo "✅ LocalAI setup complete!"
 IP_ADDR=$(pct exec "$LXC_ID" -- hostname -I | awk '{print $1}')
 echo "🌐 Access the API at: http://$IP_ADDR:8080/v1/models"
+echo "📡 Ready for Home Assistant integration or REST testing!"
