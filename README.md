@@ -29,5 +29,5 @@ chmod +x create-localai-mistral.sh
 
 ### Option 2: Run Direct
 
-bash <(curl -s https://raw.githubusercontent.com/nickysqueekz/proxmox-scripts/main/create-localai-mistral.sh)
+```bash <(curl -s https://raw.githubusercontent.com/nickysqueekz/proxmox-scripts/main/create-localai-mistral.sh)
 
