@@ -26,8 +26,10 @@ This script creates a ready-to-run **unprivileged LXC container** on Proxmox tha
 wget https://raw.githubusercontent.com/nickysqueekz/proxmox-scripts/main/create-localai-mistral.sh
 chmod +x create-localai-mistral.sh
 ./create-localai-mistral.sh
+```
 
 ### Option 2: Run Direct
 
-```bash <(curl -s https://raw.githubusercontent.com/nickysqueekz/proxmox-scripts/main/create-localai-mistral.sh)
-
+```
+bash <(curl -s https://raw.githubusercontent.com/nickysqueekz/proxmox-scripts/main/create-localai-mistral.sh)
+```
