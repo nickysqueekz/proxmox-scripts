@@ -8,7 +8,7 @@ set -euo pipefail
 trap 'echo "❌ Script failed on line $LINENO. Exiting." >&2' ERR
 
 header_info() {
-  echo -e "\n🌐 \e[1mLocalAI (Mistral 7B Instruct) LXC Installer v1.5\e[0m"
+  echo -e "\n🌐 \e[1mLocalAI (Mistral 7B Instruct) LXC Installer v1.6\e[0m"
   echo "Lean, fail-fast Proxmox script to provision a clean CPU-only LLM container."
   echo ""
 }
@@ -53,11 +53,16 @@ SWAP_MB=${SWAP_MB:-$DEFAULT_SWAP}
 read -rp "⚙️ CPU Cores [${DEFAULT_CORES}]: " CPU_CORES
 CPU_CORES=${CPU_CORES:-$DEFAULT_CORES}
 
-# Set root password
+# Root password prompt with confirmation
 echo
-read -rsp "🔐 Enter root password for LXC (will not echo): " ROOT_PASSWORD
-echo
-[ -z "$ROOT_PASSWORD" ] && echo "❌ Root password cannot be empty. Aborting." && exit 1
+while true; do
+  read -rsp "🔐 Enter root password for LXC (input hidden): " ROOT_PASSWORD
+  echo
+  read -rsp "🔐 Confirm password: " CONFIRM_PASSWORD
+  echo
+  [ "$ROOT_PASSWORD" = "$CONFIRM_PASSWORD" ] && break
+  echo "❌ Passwords do not match. Please try again."
+done
 
 # Template selection - strict match to avoid TurnKey
 TEMPLATE=$(pveam available | awk '$2 ~ /^debian-12-standard/ { print $2 }' | sort -r | head -n1)
@@ -104,7 +109,11 @@ pct exec "$LXC_ID" -- bash -c "
 
   mkdir -p /models
   cd /models
-  wget -q \"$MODEL_URL\" -O \"$MODEL_NAME\"
+  echo '📦 Downloading Mistral model...'
+  if ! wget -q \"$MODEL_URL\" -O \"$MODEL_NAME\"; then
+    echo '❌ ERROR: Failed to download Mistral model from HuggingFace.'
+    exit 1
+  fi
 
   echo '🧠 Writing config.yaml...'
   cat <<EOF > /models/config.yaml
