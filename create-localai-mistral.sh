@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Author: nickysqueekz
 # Repo: https://github.com/nickysqueekz/proxmox-scripts
-# Description: Creates an LXC container for LocalAI with Mistral 7B Instruct (CPU-only)
+# Description: Creates a minimal LXC container for LocalAI + Mistral (CPU-only, OpenAI-compatible)
 # License: MIT
 
-set -e
+set -euo pipefail
+trap 'echo "❌ Script failed on line $LINENO. Exiting." >&2' ERR
 
 header_info() {
-  echo -e "🌐 \e[1mLocalAI (Mistral 7B Instruct) LXC Installer\e[0m"
-  echo "This script creates a Proxmox LXC with LocalAI and Mistral for OpenAI-style use."
-  echo "CPU-only, optimized for smart home summarization, code help, and scene narration."
+  echo -e "\n🌐 \e[1mLocalAI (Mistral 7B Instruct) LXC Installer v1.5\e[0m"
+  echo "Lean, fail-fast Proxmox script to provision a clean CPU-only LLM container."
   echo ""
 }
 
@@ -28,52 +28,51 @@ MODEL_URL="https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve
 MODEL_NAME="mistral-7b-instruct.Q4_K_M.gguf"
 MODEL_ALIAS="mistral"
 
-# Prompt with defaults
-read -rp "🔢 Enter LXC ID [${DEFAULT_LXC_ID}]: " LXC_ID
+# Prompt for values
+read -rp "🔢 LXC ID [${DEFAULT_LXC_ID}]: " LXC_ID
 LXC_ID=${LXC_ID:-$DEFAULT_LXC_ID}
 
-read -rp "🖥️ Enter Hostname [${DEFAULT_HOSTNAME}]: " HOSTNAME
+read -rp "🖥️ Hostname [${DEFAULT_HOSTNAME}]: " HOSTNAME
 HOSTNAME=${HOSTNAME:-$DEFAULT_HOSTNAME}
 
-read -rp "💾 Enter Storage Pool [${DEFAULT_STORAGE}]: " STORAGE
+read -rp "💾 Storage Pool [${DEFAULT_STORAGE}]: " STORAGE
 STORAGE=${STORAGE:-$DEFAULT_STORAGE}
 
-read -rp "🌐 Enter Bridge [${DEFAULT_BRIDGE}]: " BRIDGE
+read -rp "🌐 Bridge [${DEFAULT_BRIDGE}]: " BRIDGE
 BRIDGE=${BRIDGE:-$DEFAULT_BRIDGE}
 
-read -rp "🔌 Enter VLAN Tag [${DEFAULT_VLAN}]: " VLAN_TAG
+read -rp "🔌 VLAN Tag [${DEFAULT_VLAN}]: " VLAN_TAG
 VLAN_TAG=${VLAN_TAG:-$DEFAULT_VLAN}
 
-read -rp "🧠 Enter RAM (MB) [${DEFAULT_RAM}]: " RAM_MB
+read -rp "🧠 RAM (MB) [${DEFAULT_RAM}]: " RAM_MB
 RAM_MB=${RAM_MB:-$DEFAULT_RAM}
 
-read -rp "📀 Enter Swap (MB) [${DEFAULT_SWAP}]: " SWAP_MB
+read -rp "📀 Swap (MB) [${DEFAULT_SWAP}]: " SWAP_MB
 SWAP_MB=${SWAP_MB:-$DEFAULT_SWAP}
 
-read -rp "⚙️ Enter CPU Cores [${DEFAULT_CORES}]: " CPU_CORES
+read -rp "⚙️ CPU Cores [${DEFAULT_CORES}]: " CPU_CORES
 CPU_CORES=${CPU_CORES:-$DEFAULT_CORES}
 
-# Template detection (latest Debian 12)
-TEMPLATE=$(pveam available | awk '$2 ~ /debian-12/ { print $2 }' | sort -r | head -n1)
+# Set root password
+echo
+read -rsp "🔐 Enter root password for LXC (will not echo): " ROOT_PASSWORD
+echo
+[ -z "$ROOT_PASSWORD" ] && echo "❌ Root password cannot be empty. Aborting." && exit 1
 
-if [ -z "$TEMPLATE" ]; then
-  echo "❌ Could not determine latest Debian 12 template. Check 'pveam available'."
-  exit 1
-fi
-
+# Template selection - strict match to avoid TurnKey
+TEMPLATE=$(pveam available | awk '$2 ~ /^debian-12-standard/ { print $2 }' | sort -r | head -n1)
 echo "📄 Using template: $TEMPLATE"
+[ -z "$TEMPLATE" ] && echo "❌ Could not find a clean Debian 12 standard template. Aborting." && exit 1
 
-# Template download
-if [ ! -f "/var/lib/vz/template/cache/$TEMPLATE" ]; then
-  echo "📦 Template not found locally. Downloading..."
+# Download template if missing
+[ ! -f "/var/lib/vz/template/cache/$TEMPLATE" ] && {
+  echo "📦 Downloading template..."
   pveam update
   pveam download local "$TEMPLATE"
-else
-  echo "✅ Template already downloaded."
-fi
+}
 
-# Create container
-echo "📦 Creating unprivileged LXC container..."
+# Create the container
+echo "📦 Creating LXC container..."
 pct create "$LXC_ID" local:vztmpl/$TEMPLATE \
   --hostname "$HOSTNAME" \
   --cores "$CPU_CORES" \
@@ -85,28 +84,27 @@ pct create "$LXC_ID" local:vztmpl/$TEMPLATE \
   --unprivileged 1 \
   --features nesting=1 \
   --start 1 \
-  --onboot 1 \
-  --description "LocalAI + Mistral 7B Instruct container"
+  --onboot 1
 
-# Inside container: install LocalAI precompiled + model
-echo "🛠️ Configuring LocalAI inside container $LXC_ID..."
+# Set root password securely
+echo "🔐 Setting root password..."
+pct exec "$LXC_ID" -- bash -c "echo 'root:$ROOT_PASSWORD' | chpasswd"
+
+# Inside container setup
+echo "🧠 Installing LocalAI + model..."
 pct exec "$LXC_ID" -- bash -c "
   set -e
   export DEBIAN_FRONTEND=noninteractive
-  apt update
-  apt upgrade -y
+  apt update && apt upgrade -y
   apt install -y --no-install-recommends curl wget unzip build-essential libopenblas-dev
 
-  echo '⬇️ Installing LocalAI binary...'
   cd /usr/local/bin
   wget -q https://github.com/go-skynet/LocalAI/releases/latest/download/localai-linux-amd64 -O localai
   chmod +x localai
-  echo '✅ LocalAI installed:' \$(/usr/local/bin/localai --version || echo 'Version info not available')
 
   mkdir -p /models
   cd /models
-  echo '⬇️ Downloading Mistral model...'
-  wget -q --show-progress \"$MODEL_URL\" -O \"$MODEL_NAME\"
+  wget -q \"$MODEL_URL\" -O \"$MODEL_NAME\"
 
   echo '🧠 Writing config.yaml...'
   cat <<EOF > /models/config.yaml
@@ -120,13 +118,12 @@ EOF
   echo '⚙️ Setting up systemd service...'
   cat <<EOF > /etc/systemd/system/localai.service
 [Unit]
-Description=LocalAI (OpenAI-compatible local LLM server)
+Description=LocalAI Server
 After=network.target
 
 [Service]
 ExecStart=/usr/local/bin/localai --models-path /models
 Restart=always
-RestartSec=5
 WorkingDirectory=/models
 LimitNOFILE=65536
 
@@ -140,8 +137,13 @@ EOF
   systemctl start localai
 "
 
-echo ""
-echo "✅ LocalAI setup complete!"
+# Health check
 IP_ADDR=$(pct exec "$LXC_ID" -- hostname -I | awk '{print $1}')
-echo "🌐 Access the API at: http://$IP_ADDR:8080/v1/models"
-echo "📡 Ready for Home Assistant integration or REST testing!"
+echo "📡 Testing LocalAI API..."
+if curl -s --fail "http://$IP_ADDR:8080/v1/models" > /dev/null; then
+  echo -e "\n✅ LocalAI is ready!"
+  echo "🌐 Access it at: http://$IP_ADDR:8080"
+else
+  echo "❌ ERROR: LocalAI did not respond. Check logs in the LXC."
+  exit 1
+fi
