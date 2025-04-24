@@ -15,23 +15,57 @@ header_info() {
 
 header_info
 
-# Prompts
-read -rp "🔢 Enter LXC ID (e.g. 10065): " LXC_ID
-read -rp "🖥️ Enter Hostname (e.g. localai): " HOSTNAME
-read -rp "💾 Enter Storage Pool (e.g. local-lvm): " STORAGE
-read -rp "🌐 Enter Bridge (e.g. vmbr0): " BRIDGE
-read -rp "🔌 Enter VLAN Tag (e.g. 10): " VLAN_TAG
-read -rp "🧠 Enter RAM (MB, e.g. 12288): " RAM_MB
-read -rp "📀 Enter Swap (MB, e.g. 1024): " SWAP_MB
-read -rp "⚙️ Enter CPU Cores (e.g. 4): " CPU_CORES
-
+# Defaults
+DEFAULT_LXC_ID=10065
+DEFAULT_HOSTNAME="localai-mistral"
+DEFAULT_STORAGE="local-lvm"
+DEFAULT_BRIDGE="vmbr0"
+DEFAULT_VLAN=10
+DEFAULT_RAM=12288
+DEFAULT_SWAP=1024
+DEFAULT_CORES=4
 TEMPLATE="debian-12-standard_20240210_amd64.tar.zst"
 MODEL_URL="https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct.Q4_K_M.gguf"
 MODEL_NAME="mistral-7b-instruct.Q4_K_M.gguf"
 MODEL_ALIAS="mistral"
 
+# Prompt with defaults
+read -rp "🔢 Enter LXC ID [${DEFAULT_LXC_ID}]: " LXC_ID
+LXC_ID=${LXC_ID:-$DEFAULT_LXC_ID}
+
+read -rp "🖥️ Enter Hostname [${DEFAULT_HOSTNAME}]: " HOSTNAME
+HOSTNAME=${HOSTNAME:-$DEFAULT_HOSTNAME}
+
+read -rp "💾 Enter Storage Pool [${DEFAULT_STORAGE}]: " STORAGE
+STORAGE=${STORAGE:-$DEFAULT_STORAGE}
+
+read -rp "🌐 Enter Bridge [${DEFAULT_BRIDGE}]: " BRIDGE
+BRIDGE=${BRIDGE:-$DEFAULT_BRIDGE}
+
+read -rp "🔌 Enter VLAN Tag [${DEFAULT_VLAN}]: " VLAN_TAG
+VLAN_TAG=${VLAN_TAG:-$DEFAULT_VLAN}
+
+read -rp "🧠 Enter RAM (MB) [${DEFAULT_RAM}]: " RAM_MB
+RAM_MB=${RAM_MB:-$DEFAULT_RAM}
+
+read -rp "📀 Enter Swap (MB) [${DEFAULT_SWAP}]: " SWAP_MB
+SWAP_MB=${SWAP_MB:-$DEFAULT_SWAP}
+
+read -rp "⚙️ Enter CPU Cores [${DEFAULT_CORES}]: " CPU_CORES
+CPU_CORES=${CPU_CORES:-$DEFAULT_CORES}
+
+# Template check
+echo "🔍 Checking if template $TEMPLATE exists in local storage..."
+
+if [ ! -f "/var/lib/vz/template/cache/$TEMPLATE" ]; then
+  echo "📦 Template not found locally. Downloading..."
+  pveam update
+  pveam download local "$TEMPLATE"
+else
+  echo "✅ Template found in cache."
+fi
+
 echo "📦 Creating unprivileged LXC container..."
-pveam update
 pct create "$LXC_ID" local:vztmpl/$TEMPLATE \
   --hostname "$HOSTNAME" \
   --cores "$CPU_CORES" \
@@ -96,4 +130,3 @@ echo ""
 echo "✅ LocalAI setup complete!"
 IP_ADDR=$(pct exec "$LXC_ID" -- hostname -I | awk '{print $1}')
 echo "🌐 Access the API at: http://$IP_ADDR:8080/v1/models"
-echo "📡 You can now call Mistral from Home Assistant using rest_command!"
