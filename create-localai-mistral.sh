@@ -24,7 +24,6 @@ DEFAULT_VLAN=10
 DEFAULT_RAM=12288
 DEFAULT_SWAP=1024
 DEFAULT_CORES=4
-TEMPLATE=$(pveam available | grep debian-12 | sort -r | head -n1 | awk '{print $2}')
 MODEL_URL="https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.1-GGUF/resolve/main/mistral-7b-instruct.Q4_K_M.gguf"
 MODEL_NAME="mistral-7b-instruct.Q4_K_M.gguf"
 MODEL_ALIAS="mistral"
@@ -54,18 +53,26 @@ SWAP_MB=${SWAP_MB:-$DEFAULT_SWAP}
 read -rp "⚙️ Enter CPU Cores [${DEFAULT_CORES}]: " CPU_CORES
 CPU_CORES=${CPU_CORES:-$DEFAULT_CORES}
 
-# Template check
-echo "📄 Using template: $TEMPLATE"
-echo "🔍 Checking if template $TEMPLATE exists in local storage..."
+# Template detection (latest Debian 12)
+TEMPLATE=$(pveam available | awk '$2 ~ /debian-12/ { print $2 }' | sort -r | head -n1)
 
+if [ -z "$TEMPLATE" ]; then
+  echo "❌ Could not determine latest Debian 12 template. Check 'pveam available'."
+  exit 1
+fi
+
+echo "📄 Using template: $TEMPLATE"
+
+# Template download
 if [ ! -f "/var/lib/vz/template/cache/$TEMPLATE" ]; then
   echo "📦 Template not found locally. Downloading..."
   pveam update
   pveam download local "$TEMPLATE"
 else
-  echo "✅ Template found in cache."
+  echo "✅ Template already downloaded."
 fi
 
+# Create container
 echo "📦 Creating unprivileged LXC container..."
 pct create "$LXC_ID" local:vztmpl/$TEMPLATE \
   --hostname "$HOSTNAME" \
@@ -81,6 +88,7 @@ pct create "$LXC_ID" local:vztmpl/$TEMPLATE \
   --onboot 1 \
   --description "LocalAI + Mistral 7B Instruct container"
 
+# Inside container: install LocalAI + model
 echo "🛠️ Configuring LocalAI inside container $LXC_ID..."
 pct exec "$LXC_ID" -- bash -c "
   set -e
