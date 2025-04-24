@@ -9,7 +9,7 @@ set -e
 header_info() {
   echo -e "🌐 \e[1mLocalAI (Mistral 7B Instruct) LXC Installer\e[0m"
   echo "This script creates a Proxmox LXC with LocalAI and Mistral for OpenAI-style use."
-  echo "CPU-only, optimized for chat-based summarization and camera scene description."
+  echo "CPU-only, optimized for chat-based summarization, code help, and smart home narration."
   echo ""
 }
 
@@ -92,8 +92,10 @@ pct create "$LXC_ID" local:vztmpl/$TEMPLATE \
 echo "🛠️ Configuring LocalAI inside container $LXC_ID..."
 pct exec "$LXC_ID" -- bash -c "
   set -e
-  apt update && apt upgrade -y
-  apt install -y curl wget unzip build-essential libopenblas-dev
+  export DEBIAN_FRONTEND=noninteractive
+  apt update
+  apt upgrade -y
+  apt install -y --no-install-recommends curl wget unzip build-essential libopenblas-dev
 
   echo '⬇️ Installing LocalAI...'
   curl -s https://raw.githubusercontent.com/go-skynet/LocalAI/main/install.sh | bash
