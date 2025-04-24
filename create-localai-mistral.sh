@@ -55,6 +55,7 @@ read -rp "⚙️ Enter CPU Cores [${DEFAULT_CORES}]: " CPU_CORES
 CPU_CORES=${CPU_CORES:-$DEFAULT_CORES}
 
 # Template check
+echo "📄 Using template: $TEMPLATE"
 echo "🔍 Checking if template $TEMPLATE exists in local storage..."
 
 if [ ! -f "/var/lib/vz/template/cache/$TEMPLATE" ]; then
